@@ -1,0 +1,23 @@
+#!/bin/bash
+# Pre-commit hook: refuse the commit if bash -n or shellcheck fails
+# on any staged .sh file. Activate once per clone with:
+#   git config core.hooksPath hooks
+set -euo pipefail
+
+mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM -- '*.sh')
+[ ${#files[@]} -eq 0 ] && exit 0
+
+fail=0
+for f in "${files[@]}"; do
+    bash -n "$f" || fail=1
+    if command -v shellcheck >/dev/null; then
+        shellcheck "$f" || fail=1
+    else
+        echo "WARNING: shellcheck not installed - only bash -n was run" >&2
+    fi
+done
+
+if [ "$fail" -ne 0 ]; then
+    echo "Commit blocked: fix the issues above (or bypass once with 'git commit --no-verify')." >&2
+    exit 1
+fi
