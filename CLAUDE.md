@@ -62,5 +62,8 @@ for the operator workflow.
   hosts need different path sets; today extras are handled via `-a`.
 - Optional data sync helper (rsync of DRS/backup trees) — deliberately
   out of scope for restore itself.
-- Generated drop-in templates for sftp Match blocks and rsyslog ossl TLS
-  input, once real RHEL 7 configs are reviewed.
+- Drop-in templates for the manual config step now live in `templates/`
+  (sshd sftp, rsyslog ossl TLS input, scoped legacy-KEX subpolicy),
+  generated from the first reviewed UC host. Keep them in sync as more
+  host configs are reviewed; they are reference-only and never installed
+  by restore.

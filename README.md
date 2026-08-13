@@ -89,6 +89,12 @@ separately if history must carry over.
 
 ## RHEL 7 → 10 config adaptation notes
 
+Reviewed drop-in templates for this step live in [`templates/`](templates/)
+(sshd SFTP settings, rsyslog TLS-over-TCP 6514 input with the Cisco rules,
+and a scoped legacy-KEX crypto subpolicy). They are reference-only — copy,
+fill in site values, and validate; restore never installs them.
+
+
 - **Never copy `sshd_config` verbatim.** RHEL 7 files often contain
   removed SSH-1-era options (`Protocol`, `RSAAuthentication`,
   `UsePrivilegeSeparation`, ...) that stop RHEL 10's sshd from starting.
