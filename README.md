@@ -45,6 +45,10 @@ migration is verified.
    `sshd_config` and rsyslog configs in `/root/migration-review/` — it
    never installs them.
 
+   > For the full manual sequence — restore, verify, data sync, config
+   > adaptation, cutover, and verification — follow the step-by-step
+   > [cutover runbook](docs/cutover-runbook.md).
+
 6. **Cut over**: power off old VM → power on new VM (same name/IP means
    clients never notice, and the copied host keys keep cached SSH
    fingerprints — e.g. CUCM DRS — valid).
@@ -88,6 +92,12 @@ separately if history must carry over.
 | `-s STEP` | Skip a step (repeatable): `hostkeys certs users cron logrotate firewalld review` |
 
 ## RHEL 7 → 10 config adaptation notes
+
+Reviewed drop-in templates for this step live in [`templates/`](templates/)
+(sshd SFTP settings, rsyslog TLS-over-TCP 6514 input with the Cisco rules,
+and a scoped legacy-KEX crypto subpolicy). They are reference-only — copy,
+fill in site values, and validate; restore never installs them.
+
 
 - **Never copy `sshd_config` verbatim.** RHEL 7 files often contain
   removed SSH-1-era options (`Protocol`, `RSAAuthentication`,
