@@ -45,6 +45,10 @@ migration is verified.
    `sshd_config` and rsyslog configs in `/root/migration-review/` — it
    never installs them.
 
+   > For the full manual sequence — restore, verify, data sync, config
+   > adaptation, cutover, and verification — follow the step-by-step
+   > [cutover runbook](docs/cutover-runbook.md).
+
 6. **Cut over**: power off old VM → power on new VM (same name/IP means
    clients never notice, and the copied host keys keep cached SSH
    fingerprints — e.g. CUCM DRS — valid).
