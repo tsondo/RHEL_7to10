@@ -58,8 +58,10 @@ copy_path /etc/rsyslog.conf
 [ -d /etc/rsyslog.d ] && copy_path /etc/rsyslog.d
 
 # --- TLS certs/keys referenced by rsyslog, plus common cert dirs ---
+# grep exits 1 when it finds no cert paths; with pipefail that would abort the
+# whole script under set -e, so swallow a no-match into an empty result.
 grep -rhoE '/[^" '"'"']+\.(pem|crt|cer|key|p12|pfx)' /etc/rsyslog.conf /etc/rsyslog.d 2>/dev/null \
-    | sort -u | while read -r certpath; do copy_path "$certpath"; done
+    | sort -u | while read -r certpath; do copy_path "$certpath"; done || true
 for d in /etc/pki/rsyslog /etc/pki/tls/private /etc/pki/tls/certs; do
     [ -d "$d" ] && copy_path "$d"
 done
@@ -97,7 +99,8 @@ getenforce > "$STAGE/info/selinux-mode.txt" 2>/dev/null || true
 
 # --- record perms/ownership of local users' dir trees (data not archived) ---
 cut -d: -f6 "$STAGE/info/users.passwd" | while read -r h; do
-    [ -d "$h" ] && find "$h" -maxdepth 2 -exec ls -ldZ {} \; >> "$STAGE/info/data-dir-perms.txt" 2>/dev/null
+    # find can exit non-zero on an unreadable subdir; don't let that abort collect.
+    [ -d "$h" ] && find "$h" -maxdepth 2 -exec ls -ldZ {} \; >> "$STAGE/info/data-dir-perms.txt" 2>/dev/null || true
 done
 
 # --- package it up ---
