@@ -100,6 +100,16 @@ no address (only `lo`) after a reboot, and SSH is refused.
   delete the ones you don't want (`sudo userdel -r <name>`) rather than
   leaving stale local accounts.
 
+- [ ] **Restore supplementary group memberships by hand.** Restore recreates
+  each account's **primary** group only — not secondary memberships like
+  `wheel` (which is GID 10, below the UID/GID 1000 cutoff, so it isn't even
+  in the archive). Re-add what each account needs:
+  ```bash
+  sudo usermod -aG wheel drsbackup     # -aG appends; repeat per account/group
+  ```
+  Cross-check against the old host's `/etc/group` (or `$REVIEW/info/users.group`
+  for the captured ones) so nobody loses sudo/role access after cutover.
+
 - [ ] **Certs** (only if the archive contained any — this host's old
   rsyslog was plaintext, so likely none):
   ```bash
@@ -185,12 +195,20 @@ certificate the old box never had.
   Confirm the printed key size / DN / SANs match the portal's rules before
   submitting. Add `-O/-U/-C` if the portal wants a specific Subject DN.
 
-- [ ] **When the signed cert comes back**, place the CA, server cert, and
-  the key generated above:
+- [ ] **Convert the CA chain** if the PKI returned a P7B (`.p7b`) instead of
+  PEM. Add `-inform DER` if the first form errors with "unable to load":
+  ```bash
+  openssl pkcs7 -print_certs -in chain.p7b -out chain.pem
+  grep -c "BEGIN CERTIFICATE" chain.pem   # expect 2+ (intermediate(s) + root)
+  ```
+  Cert order in a CA bundle doesn't matter — use it as-is for `ca.pem` below.
+
+- [ ] **When the signed cert comes back**, place the CA chain, server cert,
+  and the key generated above:
   ```bash
   sudo install -d -m 0755 /etc/pki/rsyslog
-  sudo install -m 0644 ca.pem          /etc/pki/rsyslog/ca.pem
-  sudo install -m 0644 server-cert.pem /etc/pki/rsyslog/server-cert.pem
+  sudo install -m 0644 chain.pem       /etc/pki/rsyslog/ca.pem
+  sudo install -m 0644 cert.pem        /etc/pki/rsyslog/server-cert.pem
   sudo install -m 0600 <fqdn>.key      /etc/pki/rsyslog/server-key.pem
   sudo restorecon -Rv /etc/pki/rsyslog
   ```
@@ -221,6 +239,20 @@ certificate the old box never had.
   sudo rsyslogd -N1 && sudo systemctl restart rsyslog
   sudo ss -tlnp | grep 6514            # confirm it's listening
   ```
+
+- [ ] **Onboard each sending router (peer pinning).** Send the network admin
+  [`docs/router-syslog-tls-handoff.md`](router-syslog-tls-handoff.md). They
+  configure the router and return its **client-cert Subject/SAN** and
+  **source IP**. For each router, add the Subject to `PermittedPeer` and
+  open the firewall to its source IP, then reload:
+  ```bash
+  sudo vi /etc/rsyslog.d/10-cisco-tls.conf   # PermittedPeer=["router1.fqdn","router2.fqdn", ...]
+  sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=<router-ip> port port=6514 protocol=tcp accept'
+  sudo firewall-cmd --reload
+  sudo rsyslogd -N1 && sudo systemctl restart rsyslog
+  ```
+  Until a router's Subject is in `PermittedPeer`, its connection is refused
+  by design — that's the mutual-TLS check, not a fault.
 
 ---
 
