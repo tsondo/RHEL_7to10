@@ -16,6 +16,14 @@ OLDHOST=<old-rhel7-ip-or-name>                 # old box, still powered on
 REVIEW=/root/migration-review                  # restore's staging dir (default)
 ```
 
+> **Relaying over an air-gap** (email → Notepad → paste)? Newlines get
+> mangled and here-docs (`<<'EOF'`) break — the shell hangs at the `>`
+> prompt. Prefer **single-line** commands, and for any multi-line file use a
+> one-line base64 drop instead of a here-doc:
+> `echo '<base64>' | base64 -d | sudo tee /path/to/file >/dev/null`
+> (or pipe to `sudo bash` to run a script). Generate the blob on any Linux
+> box with `base64 -w0 <file>`.
+
 ---
 
 ## Phase 0 — First-boot network sanity (OVA / cloud-init)
@@ -263,6 +271,16 @@ The old receiver was **plaintext UDP:514**; the target requirement is
 **TLS over TCP 6514**. This is net-new config, and it needs a server
 certificate the old box never had.
 
+> **Interim plaintext option.** If the routers can't switch to TLS yet (the
+> network admin needs a few days), stand up the old plaintext **UDP 514**
+> receiver in the meantime with
+> [`templates/rsyslog.d/10-cisco-udp514.conf`](../templates/rsyslog.d/10-cisco-udp514.conf)
+> — same Cisco routing rules, listening on 514 instead of TLS 6514. Do the
+> log-dir + logrotate steps below, install that drop-in,
+> `sudo firewall-cmd --add-port=514/udp` (runtime is fine for a short bridge),
+> and restart rsyslog. **Remove it and close 514 the moment TLS is live** —
+> plaintext 514 open permanently is a STIG finding.
+
 - [ ] **Generate the CSR** on this host and submit it to the NPE portal
   (RSA 2048, SHA-256, serverAuth+clientAuth, SAN from CN + extras):
   ```bash
@@ -290,11 +308,27 @@ certificate the old box never had.
   sudo restorecon -Rv /etc/pki/rsyslog
   ```
 
-- [ ] **Create the Cisco log target dirs** (rsyslog can't write them
-  otherwise):
+- [ ] **Create the Cisco log target + archive dirs.** These do **not**
+  survive the Phase 3 `/var/log` disk swap, so (re)create them here — rsyslog
+  can't write the logs, and the logrotate `lastaction` can't archive,
+  otherwise:
   ```bash
   sudo install -d -m 0750 -o root -g root /var/log/cisco /var/log/iptables
-  sudo restorecon -Rv /var/log/cisco /var/log/iptables
+  sudo install -d -m 0750 -o root -g root /var/backups/log_archive/cisco /var/backups/log_archive/iptables
+  sudo restorecon -Rv /var/log/cisco /var/log/iptables /var/backups/log_archive
+  ```
+
+- [ ] **Fix the migrated logrotate rules for RHEL 10.** The old server's
+  logrotate files (`cisco`, `cisco-uc`, `iptables`, `ise`, `solarwinds`, and
+  the base `syslog`) signal rsyslog with `kill -HUP $(cat /var/run/syslogd.pid)`
+  — a RHEL 7 path that doesn't exist here, so `|| true` swallows the failure
+  and, after the first rotation, rsyslog keeps writing to the renamed file and
+  the active log stops filling. Replace it with the systemd HUP wherever it
+  appears:
+  ```bash
+  grep -rl 'syslogd\.pid' /etc/logrotate.d/ \
+    | sudo xargs -r sed -i 's#.*syslogd\.pid.*#        /usr/bin/systemctl kill -s HUP rsyslog.service 2>/dev/null || true#'
+  grep -n 'systemctl kill' /etc/logrotate.d/*   # confirm the replacement
   ```
 
 - [ ] **Install the drop-in** and edit the peers/paths in its header:
@@ -316,6 +350,19 @@ certificate the old box never had.
   sudo rsyslogd -N1 && sudo systemctl restart rsyslog
   sudo ss -tlnp | grep 6514            # confirm it's listening
   ```
+  > **If `firewall-cmd --permanent` fails with `[Errno 17] File exists:
+  > '/etc/firewalld/zones'`** — restore copied the old server's firewalld
+  > zone files (`public.xml`, `public.xml.old`) into `/etc/firewalld/zones/`,
+  > and RHEL 10 firewalld chokes writing over them (the traceback ends in
+  > `os.mkdir('/etc/firewalld/zones')`). Move them aside so firewalld
+  > recreates the dir cleanly — safe: it doesn't touch the running firewall,
+  > and the default zone still permits SSH:
+  > ```bash
+  > sudo mkdir -p /root/fw-backup && sudo mv /etc/firewalld/zones /root/fw-backup/
+  > sudo firewall-cmd --permanent --add-port=6514/tcp && sudo firewall-cmd --reload
+  > ```
+  > A runtime-only `sudo firewall-cmd --add-port=…` (no `--permanent`)
+  > sidesteps the write entirely if you just need the port open now.
 
 - [ ] **Onboard each sending router (peer pinning).** Send the network admin
   [`docs/router-syslog-tls-handoff.md`](router-syslog-tls-handoff.md). They

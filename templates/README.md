@@ -14,7 +14,13 @@ service. **Nothing here is paste-and-go** — read the header comments.
 |---|---|---|
 | `sshd_config.d/50-sftp.conf` | `/etc/ssh/sshd_config.d/50-sftp.conf` | `sshd -t` |
 | `rsyslog.d/10-cisco-tls.conf` | `/etc/rsyslog.d/10-cisco-tls.conf` | `rsyslogd -N1` |
+| `rsyslog.d/10-cisco-udp514.conf` | `/etc/rsyslog.d/10-cisco-udp514.conf` | `rsyslogd -N1` |
 | `crypto-policies/LEGACY-SFTP-KEX.pmod` | `/etc/crypto-policies/policies/modules/LEGACY-SFTP-KEX.pmod` | `update-crypto-policies --show` |
+
+> `10-cisco-udp514.conf` is an **interim** plaintext-514 receiver for when
+> routers can't do TLS yet — same Cisco rules, no certs. It replaces the TLS
+> drop-in temporarily; remove it and close 514 once 6514/TLS is live. Never
+> run both at once.
 
 ## Key decisions baked in
 
