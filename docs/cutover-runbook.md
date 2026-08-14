@@ -18,6 +18,45 @@ REVIEW=/root/migration-review                  # restore's staging dir (default)
 
 ---
 
+## Phase 0 — First-boot network sanity (OVA / cloud-init)
+
+Do this **before** anything else on a freshly deployed VM. The OVA's
+cloud-init manages the NIC and, on every boot, **regenerates the connection
+profile back to DHCP** — silently wiping any static IP you set. Symptom:
+networking works right after you configure it, then the box comes up with
+no address (only `lo`) after a reboot, and SSH is refused.
+
+- [ ] Set the static IP on a **persistent** NetworkManager profile (replace
+      the device name and your four values). The cloud-init profile is
+      usually named `cloud-init <dev>`:
+  ```bash
+  nmcli con mod "cloud-init ens32" ipv4.method manual \
+    ipv4.addresses <IP>/<PREFIX> ipv4.gateway <GATEWAY> \
+    ipv4.dns "<DNS>" connection.autoconnect yes
+  nmcli con up "cloud-init ens32"
+  ```
+
+- [ ] **Stop cloud-init from clobbering it on the next boot** — this is the
+      fix that makes the address stick:
+  ```bash
+  echo 'network: {config: disabled}' \
+    > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+  ```
+
+- [ ] **Prove it survives a reboot** before you trust it:
+  ```bash
+  reboot
+  # after it comes back:
+  ip -4 addr show ens32      # same inet address must be present
+  ```
+
+> Notes: root's password is locked on the hardened image — use `sudo -i`
+> (with **ucadmin's own** password), not `su -`. And `ip -4 addr show` with
+> only a `127.0.0.1/8 lo` line means the NIC has no address — go straight to
+> the `nmcli` steps above.
+
+---
+
 ## Phase 1 — Restore (dry run, then real)
 
 - [ ] **Dry run.** Prints every action, changes nothing. Read it.
