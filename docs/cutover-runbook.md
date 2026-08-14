@@ -176,13 +176,22 @@ The old receiver was **plaintext UDP:514**; the target requirement is
 **TLS over TCP 6514**. This is net-new config, and it needs a server
 certificate the old box never had.
 
-- [ ] **Obtain the syslog server cert** from your PKI (DoD CA) and place
-  the CA, server cert, and key:
+- [ ] **Generate the CSR** on this host and submit it to the NPE portal
+  (RSA 2048, SHA-256, serverAuth+clientAuth, SAN from CN + extras):
+  ```bash
+  ./scripts/generate_npe_csr.sh -c <fqdn> -a IP:<prod-ip> [-a <alt-dns>]
+  # upload the resulting <fqdn>.csr to the portal; the <fqdn>.key stays here
+  ```
+  Confirm the printed key size / DN / SANs match the portal's rules before
+  submitting. Add `-O/-U/-C` if the portal wants a specific Subject DN.
+
+- [ ] **When the signed cert comes back**, place the CA, server cert, and
+  the key generated above:
   ```bash
   sudo install -d -m 0755 /etc/pki/rsyslog
-  sudo install -m 0644 ca.pem         /etc/pki/rsyslog/ca.pem
+  sudo install -m 0644 ca.pem          /etc/pki/rsyslog/ca.pem
   sudo install -m 0644 server-cert.pem /etc/pki/rsyslog/server-cert.pem
-  sudo install -m 0600 server-key.pem  /etc/pki/rsyslog/server-key.pem
+  sudo install -m 0600 <fqdn>.key      /etc/pki/rsyslog/server-key.pem
   sudo restorecon -Rv /etc/pki/rsyslog
   ```
 

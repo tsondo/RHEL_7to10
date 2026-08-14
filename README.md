@@ -91,6 +91,21 @@ separately if history must carry over.
 | `-r DIR` | Review/staging directory (default `/root/migration-review`) |
 | `-s STEP` | Skip a step (repeatable): `hostkeys certs users cron logrotate firewalld review` |
 
+### generate_npe_csr.sh (run as the operator on RHEL 10)
+
+Generates a private key + CSR for the DoD NPE certificate portal (e.g. the
+syslog TLS server cert). Run on the target host so the key never leaves it.
+Defaults: RSA 2048, SHA-256, `serverAuth`+`clientAuth`, SAN from CN + extras.
+
+| Flag | Meaning |
+|---|---|
+| `-c CN` | Common Name / FQDN (default: `hostname -f`) |
+| `-a SAN` | Extra Subject Alt Name (repeatable); bare = DNS, or `DNS:`/`IP:` prefix |
+| `-o OUTDIR` | Output directory (default: current dir) |
+| `-O ORG` / `-U OU` / `-C COUNTRY` | Optional Subject DN fields (`-U` repeatable) |
+| `-b BITS` | RSA key size: 2048 (default), 3072, 4096 |
+| `-f` | Overwrite an existing key/CSR |
+
 ## RHEL 7 → 10 config adaptation notes
 
 Reviewed drop-in templates for this step live in [`templates/`](templates/)
