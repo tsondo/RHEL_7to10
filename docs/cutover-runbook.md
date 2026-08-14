@@ -124,7 +124,84 @@ no address (only `lo`) after a reboot, and SSH is refused.
 
 ---
 
-## Phase 3 — Account data NOT in the archive
+## Phase 3 — Backup storage (mounts + perms)
+
+The DRS backups land on **/var/backups** and router logs on **/var/log**,
+both on the dedicated data disk (`sdb`). Do this **before** the rsyslog
+setup (Phase 6) creates `/var/log/cisco`, and before DRS ever writes. This
+reproduces the old server's LVM names (VG `rhel`) even though the RHEL 10
+OVA's OS disk uses plain partitions — the new VG lives only on `sdb`.
+
+Sizes here: `/var/log` = 30G (the old default), `/var/backups` = remaining
+disk. Adjust the `-L`/`-l` values if your data disk differs.
+
+- [ ] **Confirm the data disk is the empty 500G one and no `rhel` VG exists:**
+  ```bash
+  lsblk /dev/sdb           # 500G disk, no partitions/holders
+  sudo vgs; sudo pvs       # confirm nothing named 'rhel' already
+  ```
+
+- [ ] **Create the PV, VG, and the two LVs** (keeps the old names):
+  ```bash
+  sudo pvcreate /dev/sdb
+  sudo vgcreate rhel /dev/sdb
+  sudo lvcreate -n var_log     -L 30G      rhel
+  sudo lvcreate -n var_backups -l 100%FREE rhel
+  ```
+
+- [ ] **Make xfs filesystems** (matches the old server):
+  ```bash
+  sudo mkfs.xfs /dev/mapper/rhel-var_log
+  sudo mkfs.xfs /dev/mapper/rhel-var_backups
+  ```
+
+- [ ] **Seed the new /var/log with the current skeleton** (directory
+  structure + SELinux labels services expect — not old log data), then make
+  the backups mountpoint:
+  ```bash
+  sudo mount /dev/mapper/rhel-var_log /mnt
+  sudo rsync -aHAX /var/log/ /mnt/     # preserves ownership + SELinux contexts
+  sudo umount /mnt
+  sudo mkdir -p /var/backups
+  ```
+  `/var/log/audit` is its own partition (sda8) and remounts on top of the
+  new `/var/log` after reboot — leave its fstab line alone.
+
+- [ ] **Point fstab at the new LVs.** `/var/log` already has a line (the OVA
+  partition) — **replace** it; **add** the backups line. Do not append a
+  second `/var/log`:
+  ```bash
+  sudo cp /etc/fstab /etc/fstab.bak
+  sudo vi /etc/fstab
+  #  change the existing /var/log line to:
+  #    /dev/mapper/rhel-var_log      /var/log      xfs  defaults  0 0
+  #  add a new line for backups:
+  #    /dev/mapper/rhel-var_backups  /var/backups  xfs  defaults  0 0
+  sudo findmnt --verify        # sanity-check fstab syntax
+  ```
+
+- [ ] **Reboot to switch the mounts cleanly** (avoids remounting a busy
+  `/var/log` live), then verify:
+  ```bash
+  sudo systemctl reboot
+  # after it comes back:
+  findmnt /var/log /var/backups          # on rhel-var_log / rhel-var_backups
+  findmnt /var/log/audit                 # still on sda8
+  ```
+
+- [ ] **Set ownership, perms, and SELinux on the backup target:**
+  ```bash
+  sudo chown drsbackup:drsbackup /var/backups
+  sudo chmod 2770 /var/backups           # setgid: backups inherit the group
+  sudo restorecon -Rv /var/log /var/backups
+  ```
+  Watch for SELinux denials on the first DRS backup (`ausearch -m avc -ts recent`).
+  `/var/backups` gets the default `var_t`; if SFTP writes are blocked, add a
+  file-context rule (`semanage fcontext`) rather than disabling SELinux.
+
+---
+
+## Phase 4 — Account data NOT in the archive
 
 The archive carried the **account** (name/UID/hash) but **not** home-dir
 contents. `$REVIEW/info/data-dir-perms.txt` lists what existed and its
@@ -156,7 +233,7 @@ ownership/labels. Pull what you need from the old host while it's still up.
 
 ---
 
-## Phase 4 — Adapt sshd (from `templates/`)
+## Phase 5 — Adapt sshd (from `templates/`)
 
 The old `sshd_config` is staged at `$REVIEW/sshd_config.rhel7`. Do **not**
 copy it in — it has RHEL 7-only directives that stop RHEL 10 sshd, plus a
@@ -180,7 +257,7 @@ weak cipher block that's a STIG/FIPS violation.
 
 ---
 
-## Phase 5 — Adapt rsyslog to TLS/TCP 6514 (from `templates/`)
+## Phase 6 — Adapt rsyslog to TLS/TCP 6514 (from `templates/`)
 
 The old receiver was **plaintext UDP:514**; the target requirement is
 **TLS over TCP 6514**. This is net-new config, and it needs a server
@@ -256,7 +333,7 @@ certificate the old box never had.
 
 ---
 
-## Phase 6 — Legacy crypto (only if a client can't connect)
+## Phase 7 — Legacy crypto (only if a client can't connect)
 
 Skip unless an old CUCM/router SSH/SFTP client actually fails to negotiate.
 
@@ -281,7 +358,7 @@ Skip unless an old CUCM/router SSH/SFTP client actually fails to negotiate.
 
 ---
 
-## Phase 7 — Cutover
+## Phase 8 — Cutover
 
 Old and new must never hold the same IP at once.
 
@@ -295,7 +372,7 @@ Old and new must never hold the same IP at once.
 
 ---
 
-## Phase 8 — Functional verification
+## Phase 9 — Functional verification
 
 - [ ] **SSH fingerprint** — from a client that cached the old host key,
       connect and confirm **no** host-key-changed warning (proves the
@@ -314,7 +391,7 @@ Old and new must never hold the same IP at once.
 
 ---
 
-## Phase 9 — Cleanup
+## Phase 10 — Cleanup
 
 - [ ] Securely delete the archive and any copied key material once verified:
   ```bash
@@ -334,4 +411,4 @@ Old and new must never hold the same IP at once.
 
 The old VM is untouched. Power the new one off, power the old one back on,
 and it reclaims its own name/IP. Nothing in this runbook modifies the old
-host except the read-only rsync pulls in Phase 3.
+host except the read-only rsync pulls in Phase 4.
