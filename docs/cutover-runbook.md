@@ -207,6 +207,20 @@ disk. Adjust the `-L`/`-l` values if your data disk differs.
   `/var/backups` gets the default `var_t`; if SFTP writes are blocked, add a
   file-context rule (`semanage fcontext`) rather than disabling SELinux.
 
+- [ ] **Recreate the `/var/backups` directory structure** captured from the
+  old host (the `log_archive/{cisco,iptables}` layout etc. — dirs + perms/
+  ownership only, no data). Now that the disk is mounted, run restore's
+  `backups` step:
+  ```bash
+  sudo ./scripts/restore_migration.sh \
+    -s hostkeys -s certs -s users -s cron -s logrotate -s firewalld -s review \
+    "$ARCHIVE"
+  ```
+  This auto-skipped during the Phase 1 restore because the data disk wasn't
+  mounted yet. It recreates the full captured tree; trim
+  `$REVIEW/info/var-backups-structure.txt` first if you only want the
+  structural dirs, not every dated backup subdir.
+
 ---
 
 ## Phase 4 — Account data NOT in the archive

@@ -68,10 +68,13 @@ migration is verified.
 | Local users | passwd/group/shadow records, UID ≥ 1000 | Yes (original UID/GID + hash) |
 | Scheduled jobs | `/etc/cron.d`, `/var/spool/cron`, `/etc/logrotate.d` | Yes (no-clobber) |
 | firewalld | `/etc/firewalld/zones/` | Yes + reload |
-| Reference info | disk layout, fstab, network, rpm list, enabled services, SELinux customizations, data-dir perms | No — informational |
+| `/var/backups` structure | directory tree + owner/group/mode/SELinux (dirs only, **not** the data) | Yes — dirs recreated (`backups` step) |
+| Reference info | disk layout, fstab, network, rpm list, enabled services, SELinux customizations, home-dir perms | No — informational |
 
 User **data** (DRS backup sets, spooled logs) is not archived — copy it
-separately if history must carry over.
+separately if history must carry over. The `/var/backups` **directory
+structure** (e.g. the `log_archive/{cisco,iptables}` layout) *is* captured
+and recreated with its perms/ownership, just without the backup files.
 
 ## Script options
 
@@ -89,7 +92,12 @@ separately if history must carry over.
 |---|---|
 | `-n` | Dry run — print actions, change nothing |
 | `-r DIR` | Review/staging directory (default `/root/migration-review`) |
-| `-s STEP` | Skip a step (repeatable): `hostkeys certs users cron logrotate firewalld review` |
+| `-s STEP` | Skip a step (repeatable): `hostkeys certs users cron logrotate firewalld backups review` |
+
+> The `backups` step recreates the `/var/backups` directory structure
+> (dirs/perms/ownership, no data). If `/var/backups` was a separate
+> filesystem on the source, run it **after** the data disk is mounted — it
+> auto-skips (with instructions) if the mount isn't in place yet.
 
 ### generate_npe_csr.sh (run as the operator on RHEL 10)
 

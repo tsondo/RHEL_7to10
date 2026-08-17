@@ -103,6 +103,21 @@ cut -d: -f6 "$STAGE/info/users.passwd" | while read -r h; do
     [ -d "$h" ] && find "$h" -maxdepth 2 -exec ls -ldZ {} \; >> "$STAGE/info/data-dir-perms.txt" 2>/dev/null || true
 done
 
+# --- record /var/backups directory structure (dirs + owner/group/mode/context,
+#     NOT the data) so restore can recreate the tree on the new host ---
+: > "$STAGE/info/var-backups-structure.txt"
+if [ -d /var/backups ]; then
+    if mountpoint -q /var/backups 2>/dev/null; then
+        echo yes > "$STAGE/info/var-backups.ismount"
+    else
+        echo no  > "$STAGE/info/var-backups.ismount"
+    fi
+    # tab-separated: path, owner, group, octal-mode, SELinux context
+    find /var/backups -type d 2>/dev/null | while read -r d; do
+        stat -c '%n\t%U\t%G\t%a\t%C' "$d" 2>/dev/null || true
+    done >> "$STAGE/info/var-backups-structure.txt"
+fi
+
 # --- package it up ---
 tar -czpf "$ARCHIVE" -C "$STAGE" files info
 chmod 600 "$ARCHIVE"

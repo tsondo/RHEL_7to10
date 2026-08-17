@@ -6,10 +6,11 @@
 #   -r REVIEWDIR  Where to stage configs needing manual adaptation
 #                 (default: /root/migration-review)
 #   -s STEP       Skip a step (repeatable). Steps:
-#                 hostkeys certs users cron logrotate firewalld review
+#                 hostkeys certs users cron logrotate firewalld backups review
 #
 # Auto-installs: SSH host keys, TLS certs/keys, local users (original
-# UID/GID + password hash), cron, logrotate.d, firewalld zone files.
+# UID/GID + password hash), cron, logrotate.d, firewalld zone files, and
+# the /var/backups directory structure (dirs/perms/ownership only, no data).
 # Stages for MANUAL adaptation (never overwrites RHEL 10 hardened
 # configs): sshd_config, rsyslog.conf, rsyslog.d.
 
@@ -101,6 +102,27 @@ if ! skipped firewalld && [ -d "$F/etc/firewalld/zones" ]; then
     echo "== firewalld zone files"
     run cp -a "$F"/etc/firewalld/zones/. /etc/firewalld/zones/
     run firewall-cmd --reload || true
+fi
+
+if ! skipped backups && [ -s "$I/var-backups-structure.txt" ]; then
+    echo "== /var/backups directory structure (dirs + perms/ownership; no data)"
+    was_mount=$(cat "$I/var-backups.ismount" 2>/dev/null || echo no)
+    if [ "$was_mount" = yes ] && ! mountpoint -q /var/backups 2>/dev/null; then
+        # Don't create the tree on the root fs only to have the data disk
+        # mounted over it later - wait until /var/backups is its own mount.
+        echo "  SKIP: /var/backups was a separate filesystem on the source but is"
+        echo "        not mounted here yet. Mount the data disk first, then re-run:"
+        echo "        $0 -s hostkeys -s certs -s users -s cron -s logrotate \\"
+        echo "           -s firewalld -s review $ARCHIVE"
+    else
+        while IFS=$'\t' read -r bpath bowner bgroup bmode _bctx; do
+            [ -n "$bpath" ] || continue
+            getent passwd "$bowner" >/dev/null 2>&1 || bowner=root
+            getent group  "$bgroup" >/dev/null 2>&1 || bgroup=root
+            run install -d -o "$bowner" -g "$bgroup" -m "$bmode" "$bpath"
+        done < "$I/var-backups-structure.txt"
+        run restorecon -R /var/backups 2>/dev/null || true
+    fi
 fi
 
 if ! skipped review; then
