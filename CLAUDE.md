@@ -60,8 +60,11 @@ for the operator workflow.
 
 - Per-role collection profiles (e.g. `-p syslog`, `-p web`) if non-UC
   hosts need different path sets; today extras are handled via `-a`.
-- Optional data sync helper (rsync of DRS/backup trees) — deliberately
-  out of scope for restore itself.
+- Optional data sync helper (rsync of DRS/backup **data**) — deliberately
+  out of scope for restore itself. The `/var/backups` directory
+  **structure** (dirs + perms/ownership/SELinux, no data) IS captured by
+  collect and recreated by restore's `backups` step, guarded so it waits for
+  the data-disk mount before creating the tree.
 - Drop-in templates for the manual config step now live in `templates/`
   (sshd sftp, rsyslog ossl TLS input, scoped legacy-KEX subpolicy),
   generated from the first reviewed UC host. Keep them in sync as more
