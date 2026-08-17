@@ -379,9 +379,9 @@ certificate the old box never had.
   > sidesteps the write entirely if you just need the port open now.
 
 - [ ] **Onboard each sending router (peer pinning).** Send the network admin
-  [`docs/router-syslog-tls-handoff.md`](router-syslog-tls-handoff.md). They
-  configure the router and return its **client-cert Subject/SAN** and
-  **source IP**. For each router, add the Subject to `PermittedPeer` and
+  the router guide — [`docs/router-syslog-tls-guide.md`](router-syslog-tls-guide.md)
+  (a `.docx` version sits beside it for handing off). They configure the
+  router and return its **client-cert Subject/SAN** and **source IP**. For each router, add the Subject to `PermittedPeer` and
   open the firewall to its source IP, then reload:
   ```bash
   sudo vi /etc/rsyslog.d/10-cisco-tls.conf   # PermittedPeer=["router1.fqdn","router2.fqdn", ...]
