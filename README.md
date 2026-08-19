@@ -75,6 +75,10 @@ User **data** (DRS backup sets, spooled logs) is not archived — copy it
 separately if history must carry over. The `/var/backups` **directory
 structure** (e.g. the `log_archive/{cisco,iptables}` layout) *is* captured
 and recreated with its perms/ownership, just without the backup files.
+For the locally staged IOS-update tree (`/var/sftpstorage`) there is a
+dedicated helper, `sync_sftpstorage.sh`, that installs rsync and pulls it
+from the DR SFTP server onto the data disk, symlinking the old path
+(see below and runbook Phase 4).
 
 ## Script options
 
@@ -98,6 +102,28 @@ and recreated with its perms/ownership, just without the backup files.
 > (dirs/perms/ownership, no data). If `/var/backups` was a separate
 > filesystem on the source, run it **after** the data disk is mounted — it
 > auto-skips (with instructions) if the mount isn't in place yet.
+
+### sync_sftpstorage.sh (run as root on RHEL 10, after restore)
+
+Installs rsync if missing, then pulls the locally staged IOS-update tree
+(`/var/sftpstorage`) — the images each site's routers update from — over
+ssh from a peer SFTP server. Default source is the DR SFTP server
+(`tyfq-dr-sftpv`), pulled as `drsbackup`, which stays up through cutover.
+Because `/var` is a small (~10G) OS filesystem on these hosts, the tree is
+stored at `/var/backups/sftpstorage` on the data disk and
+`/var/sftpstorage` becomes a symlink to it, so existing scripts keep
+working; the script refuses to sync onto `/` or `/var` (mount the data
+disk first, runbook Phase 3). The whole tree is chowned to `drsbackup`
+(dirs 750 / files 640) and relabeled with `restorecon`. Re-runs only
+transfer changes; nothing already staged locally is ever deleted.
+
+| Flag | Meaning |
+|---|---|
+| `-n` | Dry run — prints the mutating steps, previews the transfer with `rsync --dry-run` |
+| `-s [USER@]HOST` | Server to pull from (default `drsbackup@tyfq-dr-sftpv`) |
+| `-p PATH` | Source path on the peer and local symlink location (default `/var/sftpstorage`) |
+| `-d DIR` | Real local storage dir on the data disk (default `/var/backups/sftpstorage`) |
+| `-o USER[:GROUP]` | Local owner applied to the tree (default `drsbackup:drsbackup`) |
 
 ### generate_npe_csr.sh (run as the operator on RHEL 10)
 
