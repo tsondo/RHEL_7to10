@@ -62,8 +62,11 @@ for the operator workflow.
   hosts need different path sets; today extras are handled via `-a`.
 - Data sync stays deliberately out of scope for restore itself.
   `scripts/sync_sftpstorage.sh` now covers the IOS staging tree
-  (`/var/sftpstorage`, pulled from the DR SFTP peer `tyfq-dr-sftpv`,
-  installing rsync on the target first); DRS/backup **data** sync remains
+  (stored at `/var/backups/sftpstorage` on the data disk with a
+  `/var/sftpstorage` symlink since `/var` is only ~10G; pulled as
+  `drsbackup` from the DR SFTP peer `tyfq-dr-sftpv`, chowned to that
+  account, installing rsync on the target first); DRS/backup **data**
+  sync remains
   a manual runbook step (Phase 4). The `/var/backups` directory
   **structure** (dirs + perms/ownership/SELinux, no data) IS captured by
   collect and recreated by restore's `backups` step, guarded so it waits for
