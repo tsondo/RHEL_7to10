@@ -250,6 +250,26 @@ ownership/labels. Pull what you need from the old host while it's still up.
   sudo restorecon -Rv /home/drsbackup/cdr-cmr
   ```
 
+- [ ] **IOS staging tree — `/var/sftpstorage`** (the images each site's
+  routers pull for updates). Not in the archive; pull it from the **DR SFTP
+  server** (`tyfq-dr-sftpv`), not the old host — the DR box stays up, so
+  this works before or after cutover. The helper installs rsync on this
+  host if it's missing, checks free space, syncs (preserving numeric
+  ownership — run it after restore has recreated the accounts), and fixes
+  SELinux labels:
+  ```bash
+  sudo ./scripts/sync_sftpstorage.sh -n     # preview (real rsync --dry-run)
+  sudo ./scripts/sync_sftpstorage.sh
+  ```
+  `-s [user@]host` picks a different source, `-p PATH` a different tree.
+  Re-runs only transfer changes and never delete anything already staged.
+  Mind the size: the tree lands on the OS disk's `/var` unless you give it
+  its own filesystem — the script warns if the source is bigger than the
+  free space; if it is, carve an LV for it on the data disk in Phase 3
+  before syncing. If ssh to the peer won't negotiate (FIPS client vs. an
+  older server), diagnose with `ssh -vv` — the same scoped-subpolicy rules
+  as Phase 7 apply, never `LEGACY`.
+
 > Transfer key material over the encrypted rsync/ssh channel only, as above.
 > Never stage it on an intermediate host in the clear.
 
@@ -445,6 +465,10 @@ Old and new must never hold the same IP at once.
   sudo ss -tnp | grep 6514                 # established peer connections
   sudo tail -f /var/log/cisco/cisco.log /var/log/cisco/cisco-uc.log
   ```
+- [ ] **IOS staging** — confirm `/var/sftpstorage` matches the DR server
+      (compare `du -sh /var/sftpstorage` on both, or re-run
+      `sudo ./scripts/sync_sftpstorage.sh -n` and expect no transfers) and
+      test-download one image over SFTP as a router would.
 - [ ] **Services healthy:**
   ```bash
   systemctl status sshd rsyslog firewalld --no-pager
